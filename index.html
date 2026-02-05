@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Linux Desktop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+html,body{margin:0;height:100%;background:#000;color:#fff;font-family:monospace}
+button,input{background:#000;color:#fff;border:1px solid #555}
+#login{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px}
+#terminal{display:none;flex-direction:column;height:100%}
+#top{height:30px;border-bottom:1px solid #444;display:flex;gap:6px;padding:4px}
+#out{flex:1;padding:6px;overflow:auto;white-space:pre-wrap;font-size:12px}
+#cmd{border:none;outline:none;padding:8px;font-size:14px}
+#desktop{display:none;padding:10px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <h3>Secure Login</h3>
+  <input id="gist" placeholder="GitHub Gist ID">
+  <input id="token" placeholder="GitHub Token" type="password">
+  <button onclick="doLogin()">Login</button>
+  <div id="loginStatus"></div>
+</div>
+
+<!-- TERMINAL -->
+<div id="terminal">
+  <div id="top">
+    <button onclick="showTerminal()">Terminal</button>
+    <button onclick="showDesktop()">Desktop</button>
+  </div>
+  <div id="out"></div>
+  <input id="cmd" placeholder="type command...">
+</div>
+
+<!-- DESKTOP -->
+<div id="desktop">
+  <button onclick="showTerminal()">Open Terminal</button>
+</div>
+
+<script>
+const loginUI=document.getElementById("login");
+const terminalUI=document.getElementById("terminal");
+const desktop=document.getElementById("desktop");
+const out=document.getElementById("out");
+const cmd=document.getElementById("cmd");
+const status=document.getElementById("loginStatus");
+
+let GIST=null;
+let TOKEN=null;
+let UID=localStorage.getItem("uid")||("uid_"+Math.random().toString(36).slice(2));
+localStorage.setItem("uid",UID);
+
+/* ===== LOGIN VALIDASI BENERAN ===== */
+async function doLogin(){
+  const gist=document.getElementById("gist").value.trim();
+  const token=document.getElementById("token").value.trim();
+  if(!gist||!token){
+    alert("Gist ID & Token wajib");
+    return;
+  }
+
+  status.textContent="checking token...";
+  try{
+    /* 1️⃣ cek token */
+    let userRes=await fetch("https://api.github.com/user",{
+      headers:{Authorization:"token "+token}
+    });
+    if(!userRes.ok) throw "Invalid token";
+
+    status.textContent="checking gist...";
+    /* 2️⃣ cek gist + akses */
+    let gistRes=await fetch("https://api.github.com/gists/"+gist,{
+      headers:{Authorization:"token "+token}
+    });
+    if(!gistRes.ok) throw "Invalid gist or no access";
+
+    /* ✅ LOLOS */
+    TOKEN=token;
+    GIST=gist;
+    startTerminal();
+
+  }catch(e){
+    status.textContent="";
+    alert("LOGIN FAILED:\n"+e);
+  }
+}
+
+/* ===== UI ===== */
+function startTerminal(){
+  loginUI.style.display="none";
+  terminalUI.style.display="flex";
+  print("Linux Desktop");
+  print("UID: "+UID);
+  print("Type: help basic");
+  cmd.focus();
+}
+function showTerminal(){
+  desktop.style.display="none";
+  terminalUI.style.display="flex";
+  cmd.focus();
+}
+function showDesktop(){
+  terminalUI.style.display="none";
+  desktop.style.display="block";
+}
+function print(t){
+  out.textContent+=t+"\n";
+  out.scrollTop=out.scrollHeight;
+}
+
+/* ===== HELP SYSTEM ===== */
+const HELP={
+basic:"help clear desktop terminal pkg backup",
+help:"help [command] → show explanation",
+clear:"clear → clear terminal",
+desktop:"desktop → open desktop mode",
+terminal:"terminal → back to terminal",
+pkg:"pkg import command | pkg import pack | pkg list",
+backup:"backup push | backup pull"
+};
+
+/* ===== COMMAND ENGINE ===== */
+let customCmd={};
+
+cmd.onkeydown=e=>{
+  if(e.key==="Enter"){
+    run(cmd.value.trim());
+    cmd.value="";
+  }
+};
+
+function run(input){
+  if(!input)return;
+  print("> "+input);
+  let a=input.split(" ");
+  let c=a[0];
+
+  if(customCmd[c]){
+    try{eval(customCmd[c])}
+    catch{print("error")}
+    return;
+  }
+
+  switch(c){
+    case"help":
+      a[1]?print(HELP[a[1]]||"no help"):Object.keys(HELP).forEach(x=>print(x));
+    break;
+    case"clear":out.textContent="";break;
+    case"desktop":showDesktop();break;
+    case"terminal":showTerminal();break;
+    case"pkg":
+      if(a[1]=="import"&&a[2]=="command")importCmd();
+      else if(a[1]=="import"&&a[2]=="pack")importPack();
+      else if(a[1]=="list")Object.keys(customCmd).forEach(x=>print(x));
+      else print(HELP.pkg);
+    break;
+    case"backup":
+      if(a[1]=="push")pushBackup();
+      else if(a[1]=="pull")pullBackup();
+      else print(HELP.backup);
+    break;
+    default:print("command not found");
+  }
+}
+
+/* ===== PKG ===== */
+function importCmd(){
+  let n=prompt("command name");
+  let c=prompt("js code");
+  if(n&&c){customCmd[n]=c;print("added")}
+}
+function importPack(){
+  try{
+    Object.assign(customCmd,JSON.parse(prompt("paste pack json")));
+    print("pack imported");
+  }catch{print("invalid pack")}
+}
+
+/* ===== BACKUP ===== */
+async function pushBackup(){
+  await fetch("https://api.github.com/gists/"+GIST,{
+    method:"PATCH",
+    headers:{
+      Authorization:"token "+TOKEN,
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      files:{
+        "backup.json":{
+          content:JSON.stringify({[UID]:customCmd},null,2)
+        }
+      }
+    })
+  });
+  print("backup pushed");
+}
+async function pullBackup(){
+  let r=await fetch("https://api.github.com/gists/"+GIST,{headers:{Authorization:"token "+TOKEN}});
+  let j=await r.json();
+  if(j.files?.backup.json){
+    let all=JSON.parse(j.files["backup.json"].content);
+    if(all[UID]){customCmd=all[UID];print("backup restored")}
+  }
+}
+</script>
+</body>
+</html>
