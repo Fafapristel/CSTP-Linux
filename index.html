@@ -5,25 +5,97 @@
 <title>Linux Desktop</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-html,body{margin:0;height:100%;background:#000;color:#fff;font-family:monospace}
-button,input{background:#000;color:#fff;border:1px solid #555}
-#login{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px}
-#terminal{display:none;flex-direction:column;height:100%}
-#top{height:30px;border-bottom:1px solid #444;display:flex;gap:6px;padding:4px}
-#out{flex:1;padding:6px;overflow:auto;white-space:pre-wrap;font-size:12px}
-#cmd{border:none;outline:none;padding:8px;font-size:14px}
-#desktop{display:none;padding:10px}
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  background:#000;
+  color:#fff;
+  font-family: monospace;
+  overflow:hidden;
+}
+#login{
+  position:fixed;
+  inset:0;
+  background:#000;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:8px;
+}
+#login input{
+  width:260px;
+  background:#000;
+  color:#fff;
+  border:1px solid #555;
+  padding:6px;
+}
+#login button{
+  background:#000;
+  color:#fff;
+  border:1px solid #555;
+  padding:6px 12px;
+}
+
+#terminal{
+  position:absolute;
+  inset:0;
+  display:none;
+  flex-direction:column;
+}
+#top{
+  height:30px;
+  border-bottom:1px solid #444;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:0 6px;
+}
+button{
+  background:#000;
+  color:#fff;
+  border:1px solid #555;
+  font-size:10px;
+}
+#out{
+  flex:1;
+  padding:6px;
+  overflow:auto;
+  white-space:pre-wrap;
+  font-size:11px;
+}
+#cmd{
+  background:#000;
+  color:#fff;
+  border:none;
+  outline:none;
+  padding:10px;
+  font-size:16px;
+}
+#desktop{
+  position:absolute;
+  inset:30px 0 0 0;
+  display:none;
+  padding:10px;
+}
+.icon{
+  width:64px;
+  text-align:center;
+  font-size:10px;
+}
+.icon img{width:40px}
 </style>
 </head>
 <body>
 
 <!-- LOGIN -->
 <div id="login">
-  <h3>Secure Login</h3>
-  <input id="gist" placeholder="GitHub Gist ID">
-  <input id="token" placeholder="GitHub Token" type="password">
+  <div>GitHub Gist Backup Login</div>
+  <input id="gist" placeholder="Gist ID">
+  <input id="token" placeholder="GitHub Token">
   <button onclick="doLogin()">Login</button>
-  <div id="loginStatus"></div>
+  <div id="loginMsg"></div>
 </div>
 
 <!-- TERMINAL -->
@@ -32,100 +104,96 @@ button,input{background:#000;color:#fff;border:1px solid #555}
     <button onclick="showTerminal()">Terminal</button>
     <button onclick="showDesktop()">Desktop</button>
   </div>
-  <div id="out"></div>
+  <div id="out">Linux Desktop
+Type: help basic</div>
   <input id="cmd" placeholder="type command...">
 </div>
 
 <!-- DESKTOP -->
 <div id="desktop">
-  <button onclick="showTerminal()">Open Terminal</button>
+  <div class="icon" onclick="showTerminal()">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/a/af/Tux.png">
+    <div>Terminal</div>
+  </div>
 </div>
 
 <script>
-const loginUI=document.getElementById("login");
-const terminalUI=document.getElementById("terminal");
-const desktop=document.getElementById("desktop");
+let OWNER_GIST_ID="";
+let OWNER_TOKEN="";
+let UID="user_"+Math.random().toString(36).slice(2);
+let customCmd={};
+
 const out=document.getElementById("out");
 const cmd=document.getElementById("cmd");
-const status=document.getElementById("loginStatus");
 
-let GIST=null;
-let TOKEN=null;
-let UID=localStorage.getItem("uid")||("uid_"+Math.random().toString(36).slice(2));
-localStorage.setItem("uid",UID);
-
-/* ===== LOGIN VALIDASI BENERAN ===== */
-async function doLogin(){
-  const gist=document.getElementById("gist").value.trim();
-  const token=document.getElementById("token").value.trim();
-  if(!gist||!token){
-    alert("Gist ID & Token wajib");
-    return;
-  }
-
-  status.textContent="checking token...";
-  try{
-    /* 1️⃣ cek token */
-    let userRes=await fetch("https://api.github.com/user",{
-      headers:{Authorization:"token "+token}
-    });
-    if(!userRes.ok) throw "Invalid token";
-
-    status.textContent="checking gist...";
-    /* 2️⃣ cek gist + akses */
-    let gistRes=await fetch("https://api.github.com/gists/"+gist,{
-      headers:{Authorization:"token "+token}
-    });
-    if(!gistRes.ok) throw "Invalid gist or no access";
-
-    /* ✅ LOLOS */
-    TOKEN=token;
-    GIST=gist;
-    startTerminal();
-
-  }catch(e){
-    status.textContent="";
-    alert("LOGIN FAILED:\n"+e);
-  }
-}
-
-/* ===== UI ===== */
-function startTerminal(){
-  loginUI.style.display="none";
-  terminalUI.style.display="flex";
-  print("Linux Desktop");
-  print("UID: "+UID);
-  print("Type: help basic");
-  cmd.focus();
+function print(t){
+  out.textContent+="\n"+t;
+  out.scrollTop=out.scrollHeight;
 }
 function showTerminal(){
+  terminal.style.display="flex";
   desktop.style.display="none";
-  terminalUI.style.display="flex";
   cmd.focus();
 }
 function showDesktop(){
-  terminalUI.style.display="none";
+  terminal.style.display="none";
   desktop.style.display="block";
 }
-function print(t){
-  out.textContent+=t+"\n";
-  out.scrollTop=out.scrollHeight;
+
+/* LOGIN */
+function doLogin(){
+  let g=document.getElementById("gist").value.trim();
+  let t=document.getElementById("token").value.trim();
+  if(!g||!t){
+    loginMsg.textContent="Gist ID & Token wajib";
+    return;
+  }
+  fetch("https://api.github.com/gists/"+g,{
+    headers:{Authorization:"token "+t}
+  })
+  .then(r=>{
+    if(!r.ok) throw "fail";
+    return r.json();
+  })
+  .then(d=>{
+    OWNER_GIST_ID=g;
+    OWNER_TOKEN=t;
+    document.getElementById("login").style.display="none";
+    document.getElementById("terminal").style.display="flex";
+    loadBackup(d);
+  })
+  .catch(()=>{
+    loginMsg.textContent="Token / Gist invalid";
+  });
 }
 
-/* ===== HELP SYSTEM ===== */
-const HELP={
-basic:"help clear desktop terminal pkg backup",
-help:"help [command] → show explanation",
-clear:"clear → clear terminal",
-desktop:"desktop → open desktop mode",
-terminal:"terminal → back to terminal",
-pkg:"pkg import command | pkg import pack | pkg list",
-backup:"backup push | backup pull"
-};
+/* BACKUP */
+function save(){
+  localStorage.setItem("customCmd",JSON.stringify(customCmd));
+  fetch("https://api.github.com/gists/"+OWNER_GIST_ID,{
+    method:"PATCH",
+    headers:{
+      Authorization:"token "+OWNER_TOKEN,
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      files:{
+        "backup.json":{
+          content:JSON.stringify(customCmd)
+        }
+      }
+    })
+  });
+}
+function loadBackup(d){
+  if(d.files && d.files["backup.json"]){
+    customCmd=JSON.parse(d.files["backup.json"].content);
+    localStorage.setItem("customCmd",JSON.stringify(customCmd));
+    print("cloud restore ok");
+  }
+}
 
-/* ===== COMMAND ENGINE ===== */
-let customCmd={};
-
+/* TERMINAL */
 cmd.onkeydown=e=>{
   if(e.key==="Enter"){
     run(cmd.value.trim());
@@ -133,78 +201,67 @@ cmd.onkeydown=e=>{
   }
 };
 
-function run(input){
-  if(!input)return;
-  print("> "+input);
-  let a=input.split(" ");
-  let c=a[0];
+function run(c){
+  if(!c)return;
+  print("> "+c);
+  let a=c.split(" ");
 
-  if(customCmd[c]){
-    try{eval(customCmd[c])}
-    catch{print("error")}
+  if(customCmd[a[0]]){
+    try{eval(customCmd[a[0]])}
+    catch{print("command error")}
     return;
   }
 
-  switch(c){
-    case"help":
-      a[1]?print(HELP[a[1]]||"no help"):Object.keys(HELP).forEach(x=>print(x));
-    break;
-    case"clear":out.textContent="";break;
-    case"desktop":showDesktop();break;
-    case"terminal":showTerminal();break;
-    case"pkg":
-      if(a[1]=="import"&&a[2]=="command")importCmd();
-      else if(a[1]=="import"&&a[2]=="pack")importPack();
-      else if(a[1]=="list")Object.keys(customCmd).forEach(x=>print(x));
-      else print(HELP.pkg);
-    break;
-    case"backup":
-      if(a[1]=="push")pushBackup();
-      else if(a[1]=="pull")pullBackup();
-      else print(HELP.backup);
-    break;
-    default:print("command not found");
+  if(a[0]==="help"){help(a[1]);return;}
+  if(a[0]==="clear"){out.textContent="";return;}
+  if(a[0]==="desktop"){showDesktop();return;}
+  if(a[0]==="terminal"){showTerminal();return;}
+  if(a[0]==="pkg"){
+    if(a[1]==="import")importCmd();
+    if(a[1]==="list")Object.keys(customCmd).forEach(x=>print("- "+x));
+    return;
   }
+  print("command not found");
 }
 
-/* ===== PKG ===== */
+/* HELP */
+function help(x){
+  if(!x||x==="basic"){
+    print("clear        clear terminal");
+    print("pkg          command package system");
+    print("desktop      open desktop");
+    print("terminal     open terminal");
+    print("help (cmd)   command help");
+    return;
+  }
+  if(x==="pkg"){
+    print("pkg import   add JS or HTML command");
+    print("pkg list     list custom commands");
+  }
+  if(x==="clear")print("clear terminal output");
+  if(x==="desktop")print("switch to desktop ui");
+  if(x==="terminal")print("switch to terminal ui");
+}
+
+/* PKG IMPORT */
 function importCmd(){
-  let n=prompt("command name");
-  let c=prompt("js code");
-  if(n&&c){customCmd[n]=c;print("added")}
-}
-function importPack(){
-  try{
-    Object.assign(customCmd,JSON.parse(prompt("paste pack json")));
-    print("pack imported");
-  }catch{print("invalid pack")}
-}
+  let type=prompt("1=JS  2=HTML");
+  let name=prompt("command name:");
+  if(!type||!name)return;
 
-/* ===== BACKUP ===== */
-async function pushBackup(){
-  await fetch("https://api.github.com/gists/"+GIST,{
-    method:"PATCH",
-    headers:{
-      Authorization:"token "+TOKEN,
-      "Content-Type":"application/json"
-    },
-    body:JSON.stringify({
-      files:{
-        "backup.json":{
-          content:JSON.stringify({[UID]:customCmd},null,2)
-        }
-      }
-    })
-  });
-  print("backup pushed");
-}
-async function pullBackup(){
-  let r=await fetch("https://api.github.com/gists/"+GIST,{headers:{Authorization:"token "+TOKEN}});
-  let j=await r.json();
-  if(j.files?.backup.json){
-    let all=JSON.parse(j.files["backup.json"].content);
-    if(all[UID]){customCmd=all[UID];print("backup restored")}
+  if(type==="1"){
+    let code=prompt("JS code:");
+    customCmd[name]=code;
   }
+  if(type==="2"){
+    let html=prompt("HTML:");
+    customCmd[name]=`
+      let w=window.open("","_blank");
+      w.document.write(\`${html.replace(/`/g,"\\`")}\`);
+    `;
+  }
+  save();
+  print("command added: "+name);
 }
 </script>
 </body>
